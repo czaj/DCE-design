@@ -1,0 +1,19 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below, and report the version, the seed and the specification of the design."
+type: software
+title: "DCE-design: experimental designs for discrete choice experiments in MATLAB"
+abstract: "Efficient (D-error; multinomial logit, cross-sectional and panel mixed logit, weighted models, Bayesian priors), orthogonal and full factorial designs for discrete choice experiments, with constraints, balanced blocking, evaluation of existing designs and a translator for Ngene scripts."
+authors:
+  - family-names: Czajkowski
+    given-names: Mikołaj
+version: 0.2.0
+date-released: "2026-11-20"
+url: "https://github.com/czaj/DCE-design"
+repository-code: "https://github.com/czaj/DCE-design"
+license: CC-BY-4.0
+keywords:
+  - discrete choice experiment
+  - experimental design
+  - D-efficiency
+  - mixed logit
+  - stated preferences

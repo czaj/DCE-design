@@ -1,0 +1,22 @@
+# local records of AI-assisted work and local result tables
+.ai/
+outputs/
+output/
+
+# MATLAB
+*.asv
+*.mex*
+slprj/
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+*.lnk
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
