@@ -24,7 +24,10 @@ switch crit
     case 'd'
         ld = reshape(dd_logdet(It), n, R);
         if ~allIn
-            ld = ld - reshape(dd_logdet(It(~eff, ~eff, :, :)), n, R);
+            nuisance = reshape(dd_logdet(It(~eff, ~eff, :, :)), n, R);
+            valid = isfinite(ld) & isfinite(nuisance);
+            ld(valid) = ld(valid) - nuisance(valid);
+            ld(~valid) = -Inf;
         end
         fr = exp(-ld / Pe);
     case 'a'

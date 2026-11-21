@@ -1,4 +1,4 @@
-function [D, st] = dd_panelpolish(C, D, y, o, normalize)
+function [D, st] = dd_panelpolish(C, D, y, o, scale)
 %DD_PANELPOLISH Improve a blocked design on the objective with the panel model itself. Internal.
 %   The search of dd_localsearch needs models that add up over choice tasks,
 %   so a panel mixed logit enters it through a surrogate. This stage works on
@@ -12,7 +12,7 @@ function [D, st] = dd_panelpolish(C, D, y, o, normalize)
 %   none does, o.PanelPolish passes have run, or o.MaxTime is reached.
 %
 %   Panel models are evaluated at their prior means in this stage. With
-%   normalize, each model's criterion is divided by its value at the start.
+%   scale, the model criteria use the same references as candidate selection.
 %   Where a block has too many choice sequences to list, they are simulated:
 %   moves are screened on o.PanelRespondents respondents and those that lower
 %   the objective are confirmed on o.EvalPanelRespondents others before they
@@ -68,10 +68,6 @@ for m = act
     end
     f(m) = dd_crit(It{m}, Mm, crit);
 end
-scale = ones(M, 1);
-if normalize
-    scale(act) = f(act);
-end
 obj = sum(w(act) .* f(act) ./ scale(act));
 
 % Where the choice sequences of a block are simulated, a move that lowers the
@@ -97,11 +93,7 @@ if confirm
         fc(m) = dd_crit(Itc{m}, Mm, crit);
     end
 end
-scalec = ones(M, 1);
-if normalize
-    scalec(act) = fc(act);
-end
-objc = sum(w(act) .* fc(act) ./ scalec(act));
+objc = sum(w(act) .* fc(act) ./ scale(act));
 st = struct('passes', 0, 'moves', 0, 'evaluations', 0, 'before', fc', 'after', fc', 'timedOut', false, 'confirmed', confirm);
 if ~all(isfinite(f(act))) || ~all(isfinite(fc(act)))
     return
@@ -177,7 +169,7 @@ for pass = 1:o.PanelPolish
                         fcn(m) = dd_crit(Itcn{m}, Cp.model(m), crit);
                     end
                     st.evaluations = st.evaluations + 1;
-                    objcn = sum(w(act) .* fcn(act) ./ scalec(act));
+                    objcn = sum(w(act) .* fcn(act) ./ scale(act));
                     if objcn >= objc * (1 - 1e-9)
                         continue
                     end

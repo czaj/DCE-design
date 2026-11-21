@@ -143,7 +143,7 @@ A parameter without a prior gets 0, and the result says so. A design optimised w
 
 The model's parameters are the means and the spreads; the D-error covers both.
 
-**Panel mixed logit and blocks.** In an `rppanel` model the choices of one respondent share that respondent's coefficients, so the information depends on which tasks one person answers. With `blocks > 1` a respondent answers one block, and the information of the design is the sum over blocks of the information of one respondent per block (`panelUnit = 'block'`, the default). The information of a block is a sum over all possible choice sequences when their number is at most `PanelExactMax`, otherwise an average over simulated respondents (`PanelRespondents` in the search, `EvalPanelRespondents` for the reported values). The integral over the random coefficients is computed for each sequence by importance sampling around the mode of that sequence (`PanelDraws`, `EvalPanelDraws` draws per sequence). `PanelIntegration = 'prior'` uses the same `EvalRandomDraws` draws for all sequences instead; that is the usual simulated likelihood, and it understates the D-error of sequences of more than a few choices. `dce_design` works in two stages: a search with a surrogate that adds up over tasks (the multinomial logit at the model's prior means), then a search on the objective with the panel model itself, by exchanges within blocks (with simulated sequences, an exchange found on `PanelRespondents` respondents is confirmed on `EvalPanelRespondents` others before it is applied). The second stage's design is kept only if it is also better on a validation sample (other simulated respondents and draws than the search used). The choice among the best designs of stage 1 is made on the same validation sample, and the reported values come from a third sample, so that selecting a design does not flatter its reported D-error.
+**Panel mixed logit and blocks.** In an `rppanel` model the choices of one respondent share that respondent's coefficients, so the information depends on which tasks one person answers. With `blocks > 1` a respondent answers one block, and the information of the design is the sum over blocks of the information of one respondent per block (`panelUnit = 'block'`, the default). The information of a block is a sum over all possible choice sequences when their number is at most `PanelExactMax`, otherwise an average over simulated respondents (`PanelRespondents` in the search, `EvalPanelRespondents` for the reported values). The integral over the random coefficients is computed for each sequence by importance sampling around the mode of that sequence (`PanelDraws`, `EvalPanelDraws` draws per sequence). `PanelIntegration = 'prior'` uses the same `EvalRandomDraws` draws for all sequences instead; the documented long-panel test cases gave lower D-errors with small samples of shared draws. `dce_design` works in two stages: a search with a surrogate that adds up over tasks (the multinomial logit at the model's prior means), then a search using the panel model at its prior means, by exchanges within blocks (with simulated sequences, an exchange found on `PanelRespondents` respondents is confirmed on `EvalPanelRespondents` others before it is applied). The second stage's design is kept only if it is also better on a validation sample (other simulated respondents and draws than the search used). The choice among the best designs of stage 1 is made on the same validation sample, and the reported values come from a third sample, so that selecting a design does not flatter its reported D-error.
 
 ### Several models
 
@@ -154,7 +154,7 @@ spec.models  = {m1, m2};
 spec.weights = [1 1];
 ```
 
-The objective is the weighted sum of the models' criteria. By default each criterion is first divided by the best value found for that model alone (`Normalize`), so the weights express relative importance and not the arbitrary scale of each D-error. With `spec.search.Normalize = false` the weights multiply the raw values.
+For multiple active models, the default search divides each criterion by the corresponding single-model reference. Stage 1 uses surrogate references. Candidate selection, panel polishing and validation use the same per-model scales stored in `search.evaluationReference`. To compare an existing design, apply those same scales to its evaluated model criteria: `sum(w(active).*criterion(active)./scale(active))`. With `Normalize=false`, each scale is one.
 
 ## Constraints
 
@@ -167,6 +167,8 @@ spec.require = {'abs(a.cost - b.cost) <= 80'};
 ```
 
 Constraints and level frequencies are both hard. If they cannot be met together, `dce_design` stops with an error that says which rule excludes how many tasks, and how many distinct feasible tasks exist.
+
+`dce_evaluate` checks observed counts against the supplied frequency rules, even if an existing design violates them. For a blocked panel, pass the actual block column or `Blocks` vector.
 
 ### Dominance, identical alternatives, repeated tasks
 
@@ -181,7 +183,7 @@ With `dominance = 'auto'`, alternatives with the same utility structure and the 
 | `'swap'` | Two tasks exchange their levels in one column; where frequency bounds leave room, one task changes a level. | Every level frequency is fixed exactly (strict balance with a number of rows that divides evenly, or `frequency.exact`). Nothing else can change such a design without breaking the frequencies. |
 | `'both'` | The moves of `'swap'`, in turn with row exchange: a whole task is replaced by the best task from the feasible candidates (a modified Fedorov exchange). | Some level frequency has room (`balance = 'none'`, `frequency` with `min`/`max`, or a number of rows that does not divide evenly). Row exchange changes several attributes of a task at once, which matters when constraints tie attributes together. |
 | `'rowexchange'` | Row exchange only. | Never chosen automatically. |
-| `'exhaustive'` | Every set of `rows` distinct feasible tasks that keeps the level frequencies is evaluated. | Never chosen automatically; `dce_advise` says when a problem is small enough (at most `ExhaustiveMax` designs, 2 million by default). The result is the global optimum. |
+| `'exhaustive'` | Every set of `rows` distinct feasible tasks that keeps the level frequencies is evaluated. | Never chosen automatically; `dce_advise` says when a problem is small enough (at most `ExhaustiveMax` designs, 2 million by default). Exhaustiveness applies to the enumerated stage-1 criterion and its search draws. A panel surrogate or a fresh evaluation sample can give a different ranking. |
 
 Constraints (`reject`, `require`, dominance, no repeated tasks) are respected by every method: a move that would break one is not considered. The candidates for row exchange are all feasible tasks when there are at most `CandidateMax` (3000), otherwise a random sample of that size.
 
@@ -209,7 +211,8 @@ All three types return the same result structure as an efficient design, evaluat
 |---|---|
 | `design` | table: `Task`, `Block`, one variable per design column (`alt_attribute`), level values, sorted by block |
 | `columns`, `levels`, `blocks` | column names, level indices, block of each row |
-| `objective` | weighted criterion |
+| `objective` | weighted sum of the raw model criteria, for both generation and evaluation |
+| `search.evaluatedScore`, `search.evaluationReference` | search score on reporting draws and its per-model scales (efficient designs) |
 | `models(m)` | `Derror`, `Aerror` (over the prior draws), `DerrorFixed` (at the prior means), `bayes` (mean, median, quantiles, share of draws not identified), `parameters`, `prior`, `information`, `avc`, `se`, `tRatio`, `Sestimate` (all for one replication of the design), `method` |
 | `probabilities`, `meanShare`, `utilityBalance` | predicted choice shares at the prior means of model 1 |
 | `levelCounts`, `correlations` | per design column |
@@ -218,7 +221,7 @@ All three types return the same result structure as an efficient design, evaluat
 | `search` | options, the method used and why, starts, time, objective of every start, candidates considered; for full and orthogonal designs how the design was constructed |
 | `advice` | remarks on the specification and the design, each with a topic, a level (`info`, `suggestion`, `warning`) and a text (see `dce_advise`) |
 | `notes` | assumptions and warnings |
-| `spec`, `specHash`, `seed`, `toolbox` | what is needed to reproduce the design |
+| `spec`, `specHash`, `seed`, `toolbox` | design specification and provenance; retain any starting file, command-line overrides and the draw method |
 
 Conventions: the D-error is `det(Omega)^(1/K)` where `Omega` is the covariance matrix for **one respondent who answers every row** (or, with blocks, one respondent per block) and `K` the number of parameters in the criterion. With Bayesian priors it is the mean (or median) of the D-errors over the prior draws. S-estimates count replications of the whole design; multiply by the number of blocks to get respondents.
 
@@ -246,7 +249,7 @@ Where Ngene's conventions differ from the toolbox, the translation uses the tool
 | Constants | left out of the efficiency measure unless `;con` | part of the criterion | `constants = false` |
 | Bayesian priors | used at their means unless `;eff` says `mean` or `median`; a script with `(n,…)` priors and `;eff = (mnl,d)` is therefore not optimised over the prior distribution | D-error averaged over the prior distribution | `stat = 'fixed'` |
 | Panel mixed logit | a respondent answers every row | a respondent answers one block | `panelUnit = 'design'` |
-| Several models | the weights of `;eff` multiply raw D-errors | each model scaled by its own optimum, equal weights | raw weights, `Normalize = false` |
+| Several models | the weights of `;eff` multiply raw D-errors | single-model reference scales, equal weights | raw weights, `Normalize = false` |
 
 In both modes:
 
@@ -256,4 +259,4 @@ In both modes:
 
 - `;fact` gives `type = 'full'` (with `;rows = n`, a random fraction), `;orth = sim` gives `type = 'orthogonal'`, `;orth = seq` gives `type = 'orthogonal-sequential'`.
 
-Unsupported features (error components, `;fisher`, `;orth = ood`, pivot and covariate modifiers, continuous levels, sign-only priors) raise an error that names them. So does an attribute that is used but never given levels, which Ngene accepts silently (it is usually a misspelt attribute name).
+Unsupported features (error components, `;fisher`, `;orth = ood`, pivot and covariate modifiers, continuous levels, sign-only priors) raise an error that names them. So does an attribute that is used but never given levels. Five archived files contained a misspelt attribute name in this position.

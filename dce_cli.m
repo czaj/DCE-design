@@ -20,21 +20,24 @@ function summary = dce_cli(specFile, outFolder, varargin)
 %
 %   See also dce_design, dce_evaluate, dce_export.
 
-evalFile = '';
-exportArgs = {};
-keep = true(1, numel(varargin));
-for i = 1:2:numel(varargin)
-    switch lower(char(varargin{i}))
-        case 'evaluate'
-            evalFile = char(varargin{i + 1});
-            keep([i i + 1]) = false;
-        case {'name', 'overwrite'}
-            exportArgs = [exportArgs varargin(i:i + 1)]; %#ok<AGROW>
-            keep([i i + 1]) = false;
-    end
-end
-args = varargin(keep);
 try
+    if mod(numel(varargin), 2) ~= 0
+        error('dce:options:pairs', 'Options must be name-value pairs.');
+    end
+    evalFile = '';
+    exportArgs = {};
+    keep = true(1, numel(varargin));
+    for i = 1:2:numel(varargin)
+        switch lower(char(varargin{i}))
+            case 'evaluate'
+                evalFile = char(varargin{i + 1});
+                keep([i i + 1]) = false;
+            case {'name', 'overwrite'}
+                exportArgs = [exportArgs varargin(i:i + 1)]; %#ok<AGROW>
+                keep([i i + 1]) = false;
+        end
+    end
+    args = varargin(keep);
     if isempty(evalFile)
         r = dce_design(specFile, args{:}, 'Verbose', 0);
     else
@@ -51,6 +54,8 @@ try
     summary.advice = arrayfun(@(a) sprintf('%s (%s): %s', a.topic, a.level, a.text), r.advice, 'UniformOutput', false);
     if ~isempty(r.search) && isfield(r.search, 'starts')
         summary.seconds = r.search.seconds;
+        summary.evaluatedScore = r.search.evaluatedScore;
+        summary.evaluationReference = r.search.evaluationReference;
         summary.starts = r.search.starts;
         summary.method = r.search.method;
     elseif ~isempty(r.search) && isfield(r.search, 'construction')
@@ -65,5 +70,8 @@ catch err
     summary = struct('ok', false, 'error', err.identifier, 'message', err.message);
     fprintf('DCE_RESULT %s\n', jsonencode(summary));
     rethrow(err);
+end
+if nargout == 0
+    clear summary
 end
 end

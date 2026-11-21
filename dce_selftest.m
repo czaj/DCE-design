@@ -308,6 +308,16 @@ T = add(T, 'search', 'No duplicate tasks, no dominated alternatives', isempty(r1
 T = add(T, 'search', 'Blocks of equal size with every level in every block', ...
     isequal(accumarray(r1.blocks, 1)', [6 6 6]) && r1.blocking.absentAvoidable == 0, sprintf('Psi %.1f%%', r1.blocking.Psi));
 re = dce_evaluate(specS, r1.design, 'Verbose', 0);
+badFreq = specS;
+badFreq.frequency.price.exact = [5 6 7];
+rf = dce_evaluate(badFreq, r1.design, 'Verbose', 0);
+short = dce_evaluate(badFreq, r1.design(1:12,:), 'Verbose', 0);
+T = add(T, 'evaluation', 'Existing cards are scored against the original frequency limits, including shorter designs', ...
+    re.checks.frequenciesOK && ~rf.checks.frequenciesOK && ~short.checks.frequenciesOK && isfield(rf.spec,'frequency'), '');
+invalidBlock = r1.blocks;
+invalidBlock(1) = NaN;
+T = add(T, 'evaluation', 'Missing block labels are rejected', ...
+    throws(@() dce_evaluate(specS,r1.design,'Blocks',invalidBlock,'Verbose',0),'dce:design:blocks'), '');
 T = add(T, 'search', 'Evaluating the generated design returns the same D-error', abs(re.models.Derror - r1.models.Derror) < 1e-12, '');
 T = add(T, 'search', 'Better than the Ngene design printed by Bliemer et al. (2026)', r1.models.Derror < 0.0462587 * 1.005, sprintf('%.5f vs 0.04626', r1.models.Derror));
 Cs = dd_compile(specS);
@@ -342,6 +352,17 @@ spT.models = {m1, m2};
 rT = dce_design(spT, 'Verbose', 0, 'Restarts', 3, 'Kicks', 0);
 T = add(T, 'search', 'Two models: both identified, normalised objective used', ...
     all([rT.models.identified]) && rT.search.normalized && all(rT.search.reference > 0), sprintf('%.4f %.4f', rT.models.Derror));
+sc = rT.search.evaluationReference;
+T = add(T, 'search', 'Candidate rankings and final normalized score use the same per-model references', ...
+    max(abs((rT.search.candidates.Criterion ./ sc) * rT.weights' - rT.search.candidates.Score)) < 1e-10 && ...
+    abs(rT.search.evaluatedScore - sum(rT.weights .* [rT.models.criterion] ./ sc)) < 1e-10, '');
+diagOnly = spT;
+diagOnly.weights = [1 0];
+diagOnly.models{2}.utility.hotel1 = [diagOnly.models{2}.utility.hotel1 ' + redundant'];
+diagOnly.models{2}.utility.hotel2 = [diagOnly.models{2}.utility.hotel2 ' + redundant'];
+rz = dce_evaluate(diagOnly,rT.design,'Verbose',0);
+T = add(T,'evaluation','An unidentified zero-weight model does not contaminate the active objective', ...
+    isfinite(rz.objective) && isinf(rz.models(2).criterion) && rz.objective == rz.models(1).criterion,'');
 % multinomial logit + panel mixed logit, respondents answer one block
 spP = struct();
 spP.alternatives = {'a', 'b', 'none'};
@@ -391,6 +412,9 @@ rQ = dce_design(spQ, 'Verbose', 0, 'Restarts', 2, 'Kicks', 0);
 spQ2 = spQ;
 spQ2.exclude = {'asc_sq'};
 rQ2 = dce_evaluate(spQ2, rQ.design, 'Verbose', 0);
+Cq = dd_compile(spQ2);
+T = add(T,'information','A singular model with singular nuisance information has infinite D-error', ...
+    isinf(dd_crit(zeros(Cq.model.Pt),Cq.model,'d')), '');
 Omq = rQ.models.avc;
 T = add(T, 'search', 'Status quo with fixed levels and a constant', rQ.models.identified && numel(rQ.columns) == 6 && rQ.checks.constraintsOK, '');
 T = add(T, 'search', 'Excluding the constant gives the D-error of the other parameters', ...
@@ -596,11 +620,26 @@ T = add(T, 'advice', 'All priors zero: warning', any(strcmp(aZ.topic, 'priors') 
 tmp = tempname;
 mkdir(tmp);
 cleanup = onCleanup(@() rmdir(tmp, 's'));
+T = add(T,'errors','Preflight rejects unknown design types', ...
+    throws(@() dce_check(setfield(specS,'type','misspelled'),'Verbose',0),'dce:spec:type'), ''); %#ok<SFLD>
 f = dce_export(r1, tmp, 'Name', 'hotel_test');
 js = jsondecode(fileread(f.json));
 Tl = readtable(f.long);
 T = add(T, 'export', 'Files written and readable', all(cellfun(@isfile, struct2cell(f))) && js.rows == 18 && height(Tl) == 36, '');
 T = add(T, 'export', 'Existing files are not overwritten', throws(@() dce_export(r1, tmp, 'Name', 'hotel_test'), 'dce:export:exists'), '');
+fclose(fopen(fullfile(tmp,'collision.xlsx'),'w'));
+T = add(T,'export','A collision on the last file leaves earlier destinations untouched', ...
+    throws(@() dce_export(r1,tmp,'Name','collision'),'dce:export:exists') && ~isfile(fullfile(tmp,'collision_design.csv')), '');
+T = add(T,'evaluation','A blocked panel requires its actual assignment', ...
+    throws(@() dce_evaluate(spP,removevars(rP.design,'Block'),'Verbose',0),'dce:design:blocks'), '');
+for constructed = {rFr2, rOb, rOs}
+    x = constructed{1};
+    files = dce_export(x,tmp,'Name',x.spec.type);
+    exported = jsondecode(fileread(files.json));
+    reproduced = dce_design(exported.spec,'Seed',exported.seed,'Verbose',0);
+    T = add(T,'export',['Construction survives export and replay: ' x.spec.type], ...
+        all(cellfun(@isfile,struct2cell(files))) && isequal(reproduced.design,x.design), '');
+end
 sj = fullfile(tmp, 'spec.json');
 fid = fopen(sj, 'w');
 fprintf(fid, '%s', jsonencode(specS));
@@ -608,6 +647,11 @@ fclose(fid);
 txt = evalc('sm = dce_cli(sj, fullfile(tmp, ''cli''), ''Restarts'', 3, ''Kicks'', 1);');
 T = add(T, 'export', 'JSON specification through dce_cli gives the same design', ...
     sm.ok && contains(txt, 'DCE_RESULT {') && abs(sm.objective - r1.objective) < 1e-12 && isfile(sm.files.xlsx), '');
+txt = evalc('dce_cli(sj, fullfile(tmp, ''cli-eval''), ''Evaluate'', sm.files.design)');
+lines = splitlines(strtrim(txt));
+last = char(lines(end));
+T = add(T, 'export', 'Unassigned CLI call ends with machine-readable JSON', ...
+    startsWith(last, 'DCE_RESULT ') && jsondecode(extractAfter(last, 'DCE_RESULT ')).ok, '');
 clear cleanup
 
 % ---- report ------------------------------------------------------------------------

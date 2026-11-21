@@ -107,7 +107,7 @@ if d == 0
     u = zeros(n, 0);
     return
 end
-if strcmpi(method, 'sobol') && exist('sobolset', 'file') == 2 && d <= 1111
+if strcmpi(method, 'sobol') && exist('sobolset', 'file') == 2 && license('test','Statistics_Toolbox') && d <= 1111
     old = RandStream.setGlobalStream(rs);
     restore = onCleanup(@() RandStream.setGlobalStream(old));
     p = scramble(sobolset(d), 'MatousekAffineOwen');

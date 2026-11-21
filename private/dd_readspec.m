@@ -21,10 +21,10 @@ switch lower(ext)
         if ~isstruct(spec) || ~isscalar(spec)
             dd_err('spec:json', '%s must contain one JSON object.', file);
         end
-    case '.ngs'
+    case {'.ngs', '.ngd'}
         spec = dce_ngene(file);
     otherwise
-        dd_err('spec:file', 'Unknown specification file type ''%s''. Use .json or .ngs.', ext);
+        dd_err('spec:file', 'Unknown specification file type ''%s''. Use .json, .ngs or .ngd with an embedded script.', ext);
 end
 spec.source = file;
 end

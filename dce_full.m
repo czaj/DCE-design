@@ -105,6 +105,14 @@ if C.B > 1
 end
 meas = dd_measures(C, D, y, o);
 result = dd_result(C, D, y, o, meas);
+spec.type = 'full';
+if ~isempty(nRows)
+    spec.rows = nRows;
+elseif isfield(spec, 'rows')
+    spec = rmfield(spec, 'rows');
+end
+result.spec = spec;
+result.specHash = dd_spechash(spec);
 result.blocking = bout;
 if isempty(nRows)
     txt = sprintf('full factorial: %d possible choice tasks', nAll);

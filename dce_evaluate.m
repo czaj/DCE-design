@@ -57,7 +57,12 @@ if istable(design) && isempty(blocks)
 end
 S = size(design, 1);
 spec.rows = S;
+requestedBlocks = [];
+if isfield(spec,'blocks'), requestedBlocks = spec.blocks; end
 if ~isempty(blocks)
+    if ~isnumeric(blocks) || ~isreal(blocks) || ~isvector(blocks) || any(~isfinite(blocks))
+        dd_err('design:blocks', 'Block labels must be a vector of finite numeric values.');
+    end
     blocks = double(blocks(:));
     if numel(blocks) ~= S
         dd_err('design:blocks', 'Blocks must have one entry per row of the design (%d).', S);
@@ -67,21 +72,24 @@ if ~isempty(blocks)
 elseif isfield(spec, 'blocks')
     spec = rmfield(spec, 'blocks');
 end
-% level frequencies of the specification do not bind an existing design
-freqSpec = isfield(spec, 'frequency') || ~isfield(spec, 'balance') || strcmpi(char(spec.balance), 'strict');
-specEval = spec;
-if isfield(specEval, 'frequency'), specEval = rmfield(specEval, 'frequency'); end
-specEval.balance = 'none';
-C = dd_compile(specEval);
+% Report violations even if the supplied design has too few rows to meet the bounds.
+C = dd_compile(spec, true);
+panelByBlock = strcmp(C.panelUnit,'block') && any(strcmp({C.model.type},'rppanel'));
+if ~isempty(requestedBlocks) && requestedBlocks > 1 && panelByBlock && isempty(blocks)
+    dd_err('design:blocks', 'This panel specification assigns one block per respondent. Supply a Block column or the Blocks vector.');
+end
 o = dd_options(C.spec, varargin{:});
 D = dd_tolevels(C, design, 'The design');
 meas = dd_measures(C, D, blocks, o);
 result = dd_result(C, D, blocks, o, meas);
-if freqSpec
-    result.notes{end + 1} = 'Evaluation only: the level-frequency rules of the specification are not applied; see levelCounts.';
+if ~result.checks.frequenciesOK
+    result.notes{end + 1} = 'Observed level frequencies are outside the specification bounds; compare levelCounts with the specified frequencies.';
 end
-if any(strcmp({C.model.type}, 'rppanel')) && isempty(blocks) && strcmp(C.panelUnit, 'block')
+if panelByBlock && isempty(blocks)
     result.notes{end + 1} = 'Panel mixed logit: no blocks were given, so a respondent is assumed to answer every row.';
+end
+if ~isempty(blocks) && ~isempty(requestedBlocks) && requestedBlocks ~= max(blocks)
+    result.notes{end+1} = sprintf('The file has %d block(s); the specification requested %d. Evaluation uses the block labels in the file.',max(blocks),requestedBlocks);
 end
 result.advice = dd_advice(C, result);
 if o.Verbose >= 1

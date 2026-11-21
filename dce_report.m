@@ -27,7 +27,10 @@ L{end + 1} = add('%d choice tasks x %d alternatives (%s)%s', S, J, strjoin(resul
 cname = 'D-error';
 if strcmp(result.criterion, 'a'), cname = 'A-error'; end
 if numel(result.models) > 1
-    L{end + 1} = add('Objective (weighted %s): %.6g, weights %s', cname, result.objective, mat2str(result.weights, 4));
+    L{end + 1} = add('Weighted sum of raw %s values: %.6g, weights %s', cname, result.objective, mat2str(result.weights, 4));
+    if isstruct(result.search) && isfield(result.search, 'evaluatedScore') && result.search.normalized
+        L{end + 1} = add('Normalized search score on evaluation draws: %.6g, references %s', result.search.evaluatedScore, mat2str(result.search.evaluationReference, 6));
+    end
 end
 for m = 1:numel(result.models)
     r = result.models(m);

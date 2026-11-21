@@ -1,8 +1,11 @@
-function C = dd_compile(spec)
+function C = dd_compile(spec, evaluating)
 %DD_COMPILE Validate a design specification and compile it for the engine. Internal.
 %   See SPEC.md for the specification format. Every problem raises an error
 %   with identifier dce:spec:* and a message that names the offending field.
 
+if nargin < 2
+    evaluating = false;
+end
 if ~isstruct(spec) || ~isscalar(spec)
     dd_err('spec:type', 'The specification must be a scalar struct (or a JSON object).');
 end
@@ -404,7 +407,7 @@ if isfield(spec, 'frequency') && ~isempty(spec.frequency)
     end
 end
 for k = 1:K
-    if any(lo{k} > hi{k}) || sum(lo{k}) > S || sum(hi{k}) < S
+    if ~evaluating && (any(lo{k} > hi{k}) || sum(lo{k}) > S || sum(hi{k}) < S)
         dd_err('spec:frequency', 'Level frequencies of %s cannot be met with %d rows (min %s, max %s).', ...
             colName{k}, S, mat2str(lo{k}'), mat2str(hi{k}'));
     end
@@ -475,7 +478,7 @@ for m = 1:M
     end
 end
 C.spec = spec;
-C.hash = specHash(spec);
+C.hash = dd_spechash(spec);
 end
 
 % =============================================================================
@@ -1048,25 +1051,5 @@ if isscalar(e)
 end
 if numel(e) ~= L || any(e < 0) || any(e ~= round(e))
     dd_err('spec:frequency', 'spec.frequency.%s.%s must be one non-negative integer, or one per level (%d).', attr, what, L);
-end
-end
-
-function h = specHash(spec)
-try
-    txt = jsonencode(rmfieldSafe(spec, {'search', 'notes', 'source'}));
-    md = java.security.MessageDigest.getInstance('SHA-256');
-    md.update(uint8(txt));
-    h = lower(reshape(dec2hex(typecast(md.digest(), 'uint8'))', 1, []));
-    h = h(1:16);
-catch
-    h = '';
-end
-end
-
-function s = rmfieldSafe(s, names)
-for i = 1:numel(names)
-    if isfield(s, names{i})
-        s = rmfield(s, names{i});
-    end
 end
 end

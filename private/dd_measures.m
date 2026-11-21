@@ -82,7 +82,9 @@ for m = 1:C.M
     else
         r.criterion = r.Aerror;
     end
-    obj = obj + C.w(m) * r.criterion * (C.w(m) > 0);
+    if C.w(m) > 0
+        obj = obj + C.w(m) * r.criterion;
+    end
     if m == 1
         out.models = r;
     else

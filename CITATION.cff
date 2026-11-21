@@ -6,8 +6,8 @@ abstract: "Efficient (D-error; multinomial logit, cross-sectional and panel mixe
 authors:
   - family-names: Czajkowski
     given-names: Mikołaj
-version: 0.2.0
-date-released: "2026-11-20"
+version: 0.2.1
+date-released: "2026-11-21"
 url: "https://github.com/czaj/DCE-design"
 repository-code: "https://github.com/czaj/DCE-design"
 license: CC-BY-4.0

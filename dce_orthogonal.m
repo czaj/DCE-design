@@ -208,6 +208,12 @@ if B > 1
 end
 meas = dd_measures(C, D, y, o);
 result = dd_result(C, D, y, o, meas);
+spec.type = 'orthogonal';
+if strcmp(type, 'sequential')
+    spec.type = 'orthogonal-sequential';
+end
+result.spec = spec;
+result.specHash = dd_spechash(spec);
 result.blocking = bout;
 cr = meas.correlations;
 within = 0;

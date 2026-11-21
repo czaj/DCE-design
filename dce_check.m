@@ -32,6 +32,9 @@ spec = dd_readspec(spec);
 % full factorial and orthogonal designs set their own number of rows
 ownRows = isfield(spec, 'type') && ~isempty(spec.type) && ~strcmpi(char(spec.type), 'efficient');
 if ownRows
+    if ~any(strcmpi(spec.type, {'full','orthogonal','orthogonal-simultaneous','orthogonal-sequential'}))
+        dd_err('spec:type', 'Unknown design type. Use efficient, full, orthogonal or orthogonal-sequential.');
+    end
     specC = spec;
     if ~isfield(specC, 'rows') || isempty(specC.rows)
         specC.rows = 1e6;

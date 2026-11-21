@@ -14,8 +14,12 @@ function T = bench_ngene_designs(files, outFile, varargin)
 %   and whether Ngene's design keeps this specification's constraints.
 
 if ischar(files) || isstring(files)
-    d = dir(fullfile(char(files), '**', '*.ngd'));
-    files = fullfile({d.folder}, {d.name});
+    if isscalar(string(files)) && isfolder(files)
+        d = dir(fullfile(char(files), '**', '*.ngd'));
+        files = fullfile({d.folder}, {d.name});
+    else
+        files = cellstr(files);
+    end
 end
 n = numel(files);
 T = table('Size', [n 12], 'VariableTypes', {'string', 'double', 'double', 'string', 'string', 'double', 'double', 'double', 'double', 'logical', 'string', 'string'}, ...
@@ -32,7 +36,7 @@ for i = 1:n
         spec = dce_ngene(script, 'Emulate', true);   % Ngene's own criterion, so that both designs are judged as Ngene judged its own
         spec.name = nm;
         if isfield(spec, 'start'), spec = rmfield(spec, 'start'); end
-        rN = dce_evaluate(spec, des, 'Verbose', 0);
+        rN = dce_evaluate(spec, des, varargin{:}, 'Verbose', 0);
         t = tic;
         r = dce_design(spec, 'Verbose', 0, varargin{:});
         T.Seconds(i) = toc(t);
@@ -42,7 +46,7 @@ for i = 1:n
         T.NgeneObjective(i) = rN.objective;
         T.NewObjective(i) = r.objective;
         T.GainPercent(i) = 100 * (1 - r.objective / rN.objective);
-        T.NgeneKeepsConstraints(i) = rN.checks.constraintsOK && isempty(rN.checks.duplicateTasks);
+        T.NgeneKeepsConstraints(i) = rN.checks.constraintsOK && isempty(rN.checks.duplicateTasks) && rN.checks.frequenciesOK;
         T.NgeneModelValues(i) = strjoin(arrayfun(@(m) sprintf('%.5g', m.criterion), rN.models, 'UniformOutput', false), ' ');
         T.NewModelValues(i) = strjoin(arrayfun(@(m) sprintf('%.5g', m.criterion), r.models, 'UniformOutput', false), ' ');
     catch err

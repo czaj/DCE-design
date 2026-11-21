@@ -1,0 +1,39 @@
+{
+  "name": "pilot",
+  "alternatives": [
+    "a",
+    "b",
+    "sq"
+  ],
+  "rows": 12,
+  "blocks": 3,
+  "attributes": {
+    "access": [0, 1],
+    "quality": [
+      0,
+      1,
+      2
+    ],
+    "cost": [
+      10,
+      20,
+      30
+    ]
+  },
+  "model": {
+    "utility": {
+      "a": "b_q*quality + b_access*access + b_cost*cost",
+      "b": "b_q*quality + b_access*access + b_cost*cost",
+      "sq": "asc_sq"
+    },
+    "priors": {
+      "b_q": 0.4,
+      "b_access": 0.25,
+      "b_cost": -0.05,
+      "asc_sq": 0.1
+    }
+  },
+  "search": {
+    "Seed": 1
+  }
+}

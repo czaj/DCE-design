@@ -173,6 +173,12 @@ normalize = normalize && numel(act) > 1;
 ref = ones(C.M, 1);
 kappa = ones(C.M, 1);
 panelIdx = act(strcmp({C.model(act).type}, 'rppanel'));
+panel = ~isempty(panelIdx);
+oV = o;
+if panel
+    oV.Seed = o.Seed + 7331;
+end
+scale = ones(1, C.M);
 if normalize
     % each model is scaled by the best value found for it alone
     say(2, 'Reference optimum of each model:\n');
@@ -181,10 +187,20 @@ if normalize
         Cm.w = zeros(C.M, 1);
         Cm.w(m) = 1;
         if strcmp(method, 'exhaustive')
-            [~, ref(m)] = dd_exhaustive(Cm, DR, o, pool);
+            [Dm, ref(m)] = dd_exhaustive(Cm, DR, o, pool);
         else
             cm = dd_search(Cm, DR, o, D0, max(2, ceil(o.Restarts / 3)), pool);
             ref(m) = cm(1).f;
+            Dm = cm(1).D;
+        end
+        ym = [];
+        if panel
+            [Dm, ym] = blockDesign(C, Dm, o);
+        end
+        referenceEval = dd_measures(C, Dm, ym, oV);
+        scale(m) = referenceEval.models(m).criterion;
+        if ~isfinite(scale(m)) || scale(m) <= 0 || ~isfinite(ref(m)) || ref(m) <= 0
+            dd_err('search:notIdentified', 'No finite positive reference criterion was found for model %s.', C.model(m).name);
         end
         say(2, '  %-12s %.6g\n', C.model(m).name, ref(m));
     end
@@ -216,7 +232,6 @@ else
 end
 say(2, 'Search (%s): %d starts, %d distinct local optima, best search objective %.6g\n', method, numel(slog), numel(cand), cand(1).f);
 nDistinct = numel(cand);
-panel = any(strcmp({C.model.type}, 'rppanel'));
 nc = min(o.Candidates, numel(cand));
 cand = cand(1:nc);
 candMethod = repmat({method}, 1, nc);
@@ -250,10 +265,6 @@ end
 res = cell(nc, 1);
 score = zeros(nc, 1);
 crit = zeros(nc, C.M);
-oV = o;
-if panel
-    oV.Seed = o.Seed + 7331;
-end
 for i = 1:nc
     D = cand(i).D;
     y = [];
@@ -264,10 +275,6 @@ for i = 1:nc
     meas = dd_measures(C, D, y, oV);
     res{i} = struct('D', D, 'y', y, 'bout', bout, 'meas', meas);
     crit(i, :) = [meas.models.criterion];
-end
-scale = ones(1, C.M);
-if normalize
-    scale = min(crit, [], 1);
 end
 for i = 1:nc
     score(i) = sum(C.w(act)' .* crit(i, act) ./ scale(act));
@@ -288,7 +295,7 @@ if ~panel
 elseif o.PanelPolish > 0
     % second stage: the objective with the panel model itself, by exchanges
     % within blocks (the first stage could only use a surrogate)
-    [Dp, polish] = dd_panelpolish(C, D, y, o, normalize);
+    [Dp, polish] = dd_panelpolish(C, D, y, o, scale(:));
     say(2, 'Panel stage: %d moves in %d pass(es), %d evaluations\n', polish.moves, polish.passes, polish.evaluations);
     polish.accepted = false;
     polish.evalBefore = [meas.models.criterion];
@@ -298,11 +305,7 @@ elseif o.PanelPolish > 0
         measP = dd_measures(C, Dp, y, oV);
         cb = [measV.models.criterion];
         ca = [measP.models.criterion];
-        sc = ones(1, C.M);
-        if normalize
-            sc = cb;
-        end
-        if sum(C.w(act)' .* ca(act) ./ sc(act)) < sum(C.w(act)' .* cb(act) ./ sc(act))
+        if sum(C.w(act)' .* ca(act) ./ scale(act)) < sum(C.w(act)' .* cb(act) ./ scale(act))
             D = Dp;
             meas = dd_measures(C, Dp, y, o);
             polish.accepted = true;
@@ -332,12 +335,13 @@ if ~isempty(pool)
 end
 sr.exhaustive = exhaustive;
 if ~isempty(exhaustive)
-    result.notes{end + 1} = sprintf(['All %d designs that satisfy the constraints and level frequencies were evaluated (%d sets of feasible tasks); ' ...
-        'this design is the best of them%s.'], exhaustive.designs, exhaustive.sets, ...
-        ternaryText(any([DR(act).R] > 1), ' on the prior draws of the search', ''));
+    result.notes{end + 1} = sprintf(['Stage 1 enumerated %d designs that satisfy the constraints and level frequencies ' ...
+        '(%d sets of feasible tasks) and selected its minimum search criterion.'], exhaustive.designs, exhaustive.sets);
 end
 sr.normalized = normalize;
 sr.reference = ref';
+sr.evaluationReference = scale;
+sr.evaluatedScore = sum(C.w(act)' .* [meas.models(act).criterion] ./ scale(act));
 sr.surrogateScale = kappa';
 sr.candidates = table((1:nc)', candMethod(:), [cand(1:nc).f]', score, crit, (1:nc)' == best, ...
     'VariableNames', {'Candidate', 'Method', 'SearchObjective', 'Score', 'Criterion', 'Chosen'});
@@ -375,7 +379,7 @@ if sr.timedOut
     result.notes{end + 1} = sprintf('MaxTime (%g s) was reached; the design is the best found so far.', o.MaxTime);
 end
 if sr.normalized
-    result.notes{end + 1} = 'Several models: each criterion is divided by the best value found for that model alone before weighting.';
+    result.notes{end + 1} = 'The search score scales each active model by its single-model reference design. A panel reference is generated with the stage-1 surrogate and scored on the panel model.';
 end
 result.search = sr;
 if ~result.checks.constraintsOK || ~isempty(result.checks.duplicateTasks) || ~result.checks.frequenciesOK

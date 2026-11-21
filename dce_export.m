@@ -38,6 +38,13 @@ end
 if ~isfolder(folder)
     mkdir(folder);
 end
+if ~p.Results.Overwrite
+    formats = {'csv','csv','txt','mat','json','xlsx'};
+    suffixes = {'_design.csv','_long.csv','_report.txt','.mat','.json','.xlsx'};
+    for k = find(ismember(formats,fmt))
+        target(folder, [stem suffixes{k}], false);
+    end
+end
 C = dd_compile(evalSpec(result));
 S = result.rows;
 J = numel(result.alternatives);
@@ -79,9 +86,12 @@ if any(strcmp(fmt, 'mat'))
 end
 if any(strcmp(fmt, 'json'))
     files.json = target(folder, [stem '.json'], p.Results.Overwrite);
-    fid = fopen(files.json, 'w', 'n', 'UTF-8');
-    fprintf(fid, '%s', jsonencode(jsonView(result), 'PrettyPrint', true));
-    fclose(fid);
+    encoded = jsonencode(jsonView(result), 'PrettyPrint', true);
+    [fid, message] = fopen(files.json, 'w', 'n', 'UTF-8');
+    if fid < 0, error('dce:export:write','Cannot write %s: %s',files.json,message); end
+    closeFile = onCleanup(@() fclose(fid));
+    fprintf(fid, '%s', encoded);
+    clear closeFile
 end
 if any(strcmp(fmt, 'xlsx'))
     files.xlsx = target(folder, [stem '.xlsx'], p.Results.Overwrite);
@@ -168,7 +178,9 @@ end
 J.models = mm;
 if ~isempty(result.search)
     s = result.search;
-    s.candidates = table2struct(s.candidates);
+    if isfield(s, 'candidates')
+        s.candidates = table2struct(s.candidates);
+    end
     J.search = s;
 end
 sp = result.spec;

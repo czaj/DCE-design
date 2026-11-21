@@ -2,9 +2,24 @@
 
 Experimental designs for discrete choice experiments in MATLAB: generate a design, block it, evaluate it, compare it with an existing one.
 
-The toolbox finds efficient designs: it minimises the D-error (or A-error) of a multinomial logit, a cross-sectional or a panel mixed logit model, or of a weighted combination of models, with fixed or Bayesian priors, under level-balance rules and constraints on the choice tasks. It also builds orthogonal and full factorial designs, reads Ngene scripts, and says what it notices about a specification and a design. The same seed and specification always give the same design, and every design is returned with its evaluation, its checks and what is needed to reproduce it.
+The toolbox finds efficient designs: it minimises the D-error (or A-error) of a multinomial logit, a cross-sectional or a panel mixed logit model, or of a weighted combination of models, with fixed or Bayesian priors, under level-balance rules and constraints on the choice tasks. It also builds orthogonal and full factorial designs, reads Ngene scripts, and says what it notices about a specification and a design. Each design comes with its evaluation and checks. To reproduce the cards, keep the specification, starting design, seed, exact call and software versions. Use the same draw method and a fixed search budget in starts and passes. A wall-clock cutoff can stop a run at a different move.
 
 ## Getting started
+
+Clone the public repository, change into it and run the bundled JSON example from a shell with MATLAB on the path.
+
+```sh
+git clone https://github.com/czaj/DCE-design.git
+cd DCE-design
+matlab -batch "dce_check('examples/pilot.json'); dce_cli('examples/pilot.json','outputs/pilot_v1')"
+```
+
+The final `DCE_RESULT` line contains JSON. The wide CSV records one row per task and the long CSV one per alternative. For a second run, choose a new output folder. To evaluate the exported cards under the same specification, run:
+
+```sh
+matlab -batch "dce_cli('examples/pilot.json','outputs/pilot_check','Evaluate','outputs/pilot_v1/pilot_design.csv')"
+```
+
 
 ```matlab
 addpath('...\DCE-design')
@@ -59,13 +74,13 @@ dce_export(r, 'outputs');        % csv (wide and long), xlsx, json, mat, report
 
 **Priors.** Fixed, or Bayesian (normal, uniform). The Bayesian criterion is the mean (or median) of the D-error over scrambled Sobol draws of the priors; the search uses 128 draws and the reported value 2048.
 
-**Several models.** A weighted sum of the models' criteria. By default each model is first scaled by the best value found for it alone, so weights express relative importance.
+**Several models.** The search scales each active model by a reference design found in a single-model search. With a panel model, the first stage uses its surrogate and the final selection scores its reference design on the panel model. The reference values and evaluated search score are returned alongside the raw weighted sum.
 
 **Constraints.** Any logical expression on the attributes of a task (`reject`, `require`); tasks with a dominated or identical alternative; repeated tasks, including mirror images; exact, minimum and maximum level frequencies. All hold at the same time. If they cannot, the error says which rule excludes what.
 
 **Blocks.** Every level in every block where the block size allows, the lowest and highest level of linear attributes (cost) in every block, then the best level balance (Bliemer, Hess, Collins & Amaris 2026); the design's information without each block is reported.
 
-**Panel mixed logit.** A respondent answers one block, so the panel information is computed per block: over all choice sequences of a block, or over simulated respondents when the sequences are too many to list. The probability of a sequence is an integral over the random coefficients, and the toolbox computes it separately for every sequence: by importance sampling around the coefficients that the sequence makes most likely, with control variates that leave only the departure from normality to be simulated, and with corrections for the bias of the simulation (`private/dd_panelis.m`). The usual simulation, which uses one set of draws for all sequences, overstates the information of any sequence longer than a few choices, so it understates the D-error; how much is shown under [How it was checked](#how-it-was-checked). The search has two stages. Stage 1 uses a surrogate that adds up over tasks (the multinomial logit at the model's prior means), blocks the best designs and compares them on the panel criterion. Stage 2 optimises the objective with the panel model itself by exchanging levels within blocks, which leaves the level balance of every block untouched. Where the choice sequences are simulated, an exchange that helps on the respondents of the search is applied only if it also helps on a larger sample. The result of the stage is kept only if it is also better on a validation sample of other respondents and draws. All choices between designs of a panel model are made on that sample, and the reported values come from a third one, so that they are not flattered by the selection. Where the search may replace whole tasks (see Search), stage 1 is run both with and without that move, and the designs of both runs are compared on the panel criterion.
+**Panel mixed logit.** A respondent answers one block, so the panel information is computed per block: over all choice sequences of a block, or over simulated respondents when the sequences are too many to list. The probability of a sequence is an integral over the random coefficients, and the toolbox computes it separately for every sequence: by importance sampling around the coefficients that the sequence makes most likely, with control variates that leave only the departure from normality to be simulated, and with corrections for the bias of the simulation (`private/dd_panelis.m`). In the long-panel examples tested here, sharing a small set of prior draws across sequences underestimated D-error. The magnitude depends on the design and the draw count, as shown under [How it was checked](#how-it-was-checked). The search has two stages. Stage 1 uses a surrogate that adds up over tasks (the multinomial logit at the model's prior means), blocks the best designs and compares them on the panel criterion. Stage 2 optimises the objective with the panel model itself by exchanging levels within blocks, which leaves the level balance of every block untouched. Where the choice sequences are simulated, an exchange that helps on the respondents of the search is applied only if it also helps on a larger sample. The result of the stage is kept only if it is also better on a validation sample of other respondents and draws. All choices between designs of a panel model are made on that sample, and the reported values come from a third one, so that they are not flattered by the selection. Where the search may replace whole tasks (see Search), stage 1 is run both with and without that move, and the designs of both runs are compared on the panel criterion.
 
 **Search.** From each random feasible start the design is improved until no move helps, then perturbed and improved again; several starts run independently (in parallel if a pool is open) and give the same result either way. The information matrix is updated only from the rows that change, for all prior draws at once. The moves are chosen from the specification (`Method = 'auto'`):
 
@@ -104,7 +119,7 @@ Given as name-value pairs or in `spec.search`.
 | `PanelRespondents`, `EvalPanelRespondents` | 500, 2000 | panel models, when a respondent's choice sequences are more than `PanelExactMax` (5000) and are simulated: respondents on which the moves of stage 2 are screened, and respondents on which they are confirmed and from which the values are reported (separate samples) |
 | `PanelBayesDraws` | 16 | panel models: prior draws for the reported values |
 | `PanelIntegration` | `'importance'` | `'prior'` is the usual simulation, with `EvalRandomDraws` draws shared by all sequences |
-| `Normalize` | on with several models | scale each model by its own optimum |
+| `Normalize` | on with several models | scale each model by its single-model reference design |
 | `Candidates` | 3 | best distinct designs that are fully evaluated before one is chosen |
 | `Block`, `BlockRestarts` | true, 30 | blocking |
 | `Checkpoint` | — | file stem; the result of every start is saved |
@@ -117,7 +132,7 @@ Given as name-value pairs or in `spec.search`.
 - **Published designs.** The four designs of Bliemer, Rose & Chorus (2017) give their D-errors (0.304, 0.076, 0.057, 0.064) and their numbers of tasks with a dominated alternative (8, 5, 2, 0 of 8). Three designs from Hole's `dcreate` give their D-efficiencies to ten digits, with linear and dummy coding. The design of Zwerina, Huber & Kuhfeld gives 27^(−1/2) under effects coding.
 - **Information matrices.** For the multinomial logit, the cross-sectional and the panel mixed logit (normal, lognormal, uniform and triangular coefficients), the information matrix equals minus the numerical second derivative of the expected log-likelihood (relative error below 2e-6). The panel information from simulated respondents agrees with the one from all choice sequences.
 - **Panel information.** The integration over the random coefficients was checked against plain simulation with so many draws that it has converged. For a design with 18 tasks per respondent and six normal coefficients, the scores of 200 choice sequences from 12.6 million draws give a D-error of 6.01. Importance sampling gives 6.06 and 6.08 with 128 draws per sequence and 6.01 and 6.00 with 1,024 (two seeds each). Plain simulation with one set of draws for all sequences gives 1.9–2.0 with 250 draws, 3.2–3.4 with 1,000, 4.6–4.7 with 4,000, 5.6–5.8 with 16,000 and 5.8–6.0 with 64,000: it approaches the same value from below, and with the few hundred or thousand draws that are usual it reports a D-error that is far too low. In three of our designs with shorter sequences, 1,000 such draws understated the D-error by 1% (4 tasks per respondent), 9% (8 tasks) and 14% (12 tasks). The self-test repeats the comparison on a design of 6 tasks with normal, lognormal, uniform and triangular coefficients (4.867 against 4.856 from 131,072 draws) and on one of 16 tasks (1.2880 with 32 draws per sequence, 1.2882 with 512, 1.2873 from plain simulation with 65,536 draws, 1.199 with 250).
-- **Standard errors.** Choices are simulated and the model re-estimated 300 times; the spread of the estimates matches the predicted standard errors (ratios 0.97–1.06).
+- **MNL standard errors.** Choices are simulated and the multinomial logit is re-estimated 300 times. The spread of the estimates matches the predicted standard errors (ratios 0.97–1.06).
 - **Search.** On two problems small enough to enumerate (46,656 and 25,344 designs) the default search finds the global optimum. Constraints, level frequencies, duplicates, reproducibility and the running objective are checked on generated designs.
 - **Orthogonal arrays.** The construction finds L8, L9, L12 (2^11), L16 (4^5), L18 (2 × 3^7) and L36 (3^4 × 2^2).
 - **Ngene.** The script and design printed in Bliemer et al. (2026) give the same D-error through the translator as through a native specification. Two Bayesian designs that Ngene saved together with their scripts evaluate here to D-errors 0.0937 and 0.1433; Ngene had reported 0.0936 and 0.1433.
@@ -141,10 +156,12 @@ An `.ngd` file holds a design together with the script that produced it. For 15 
 | K | 32 / 4 | MNL | 0.2641 | 0.2607 | −1.3% | 13 |
 | L | 32 / 2 | panel MXL | 5.536 | 5.777 | +4.4% | 27 |
 | M | 36 / 1 | MNL (33 parameters) | 0.7544 | 0.7375 | −2.2% | 63 |
-| N | 36 / 4 | MNL | 0.3957 | 0.3957 | 0.0% | 6 |
+| N | 36 / 4 | MNL | 0.395655 | 0.395733 | +0.02% | 6 |
 | O | 36 / 3 | MNL | 0.1321 | 0.1286 | −2.7% | 16 |
 
-The new design has the lower criterion in 13 of the 15 cases (by 0.8% to 14%; the median over all 15 cases is 3.4%), the same in one (N) and a higher one in one (L, by 4%). The search took from 1 second to 7 minutes, with a median of 44 seconds; the designs with a panel model take the longest, because their criterion is simulated. How long Ngene ran is not recorded in its files; the one run we have a record of (design B) took about three hours. Ngene's search ends when the user stops it, so a longer run could have improved some of its designs.
+The new design has a lower criterion in 13 of 15 cases. The median reduction is 3.35% and the largest is 14.17%. The criterion rises by 0.02% for N and 4.36% for L. Generation took 1–418 seconds on the original desktop, with a median of 44 seconds. These are comparisons with saved designs. Native Ngene run times and time to a common quality threshold were not recorded. Six archived designs (A, B, E, G, I, M) violate one or more translated level-frequency bounds. Of the nine that meet the row and frequency rules, seven improved, with a median reduction of 2.62% across all nine.
+
+An independent rerun from the [public 0.2.0 source](https://github.com/czaj/DCE-design/tree/8ea83116ca33f500f402218c0b5c22165ae4ac0f) reproduced all 15 pairs of criterion values. A fresh evaluation at seed 73 favoured the same 13 new designs. The original study files are held by the project teams.
 
 The values of the designs with a panel model are higher than plain simulation with the numbers of draws in the scripts gives for them, because of the way the coefficients are integrated (see [How it was checked](#how-it-was-checked)). For the two designs with only a panel model the comparison itself is a simulated quantity: over four samples of 2,000 simulated respondents, design G was better than Ngene's by 0.6% to 5.8% and design L worse by 1.4% to 4.4%.
 
@@ -158,13 +175,24 @@ With the toolbox's own conventions (constants in the criterion, a respondent ans
 
 In the third case the surrogate search alone gave a design that was worse for the panel model than Ngene's; the stage on the panel criterion itself corrected that. Ngene's designs were made for the criterion of the first table, so this second table shows what the two stages do; it is not a comparison of the two programs.
 
+## Two designs from a project-specific Python search
+
+A separate comparison used two archived Bayesian MNL designs produced with a Python swap search, each with 48 tasks and four blocks. The original Python code reproduced both sets of cards exactly. Both tools started from the earlier survey and used the same prior distributions and task constraints. The final designs were scored in MATLAB and independently in Python using 8,192 fresh Sobol draws in each implementation.
+
+| Alternatives | Python D-error | DCE-design D-error | Python search | DCE-design generation |
+|---|---:|---:|---:|---:|
+| 2 | 0.144006 | 0.143970 | 139 s | 64 s |
+| 3 | 0.079201 | 0.078627 | 135 s | 130 s |
+
+For two alternatives both searches retained exactly the same marginal level counts. D-error fell by 0.025% and the Python run took 2.18 times as long. For three alternatives Python retained the original counts in each programme column, while MATLAB could vary each count between the counts in the two original columns. The 0.73% gain includes that difference in design freedom. Times are individual desktop runs. MATLAB includes blocking and final evaluation, while the Python time covers its optimization loop.
+
 ## Conventions
 
 - D-error = det(Ω)^(1/K): Ω is the covariance matrix for one respondent who answers every row (with blocks: one respondent per block, which is the same number of choices), K the number of parameters in the criterion. More rows give a lower D-error. D-errors are comparable only for the same model, coding and priors.
 - Bayesian D-error = mean over prior draws of the D-error (as in Ngene and idefix; JMP uses the expected log-determinant instead).
 - The base level of a dummy or effects coded attribute is the first level listed, unless `spec.base` names another. In translated Ngene scripts it is the last level, as in Ngene.
 - Constants are part of the criterion unless `spec.constants = false` (or they are listed in `spec.exclude`). Ngene leaves them out unless `;con` is given.
-- Bayesian priors are always integrated over. Ngene uses only their means unless `;eff` asks for `mean` or `median`.
+- The default final Bayesian criterion integrates over the priors. A fixed-statistic evaluation uses their means. Panel refinement screens exchanges at the panel prior means and validates the selected design on the requested criterion.
 - In panel models a respondent answers one block. Ngene assumes that a respondent answers every row.
 - Translated Ngene scripts follow the toolbox on the last three points and say so in the notes; `dce_ngene(script, 'Emulate', true)` follows Ngene, to reproduce a value Ngene reported.
 
@@ -196,9 +224,9 @@ Requires MATLAB R2022a or later (paged matrix functions) and the Statistics and 
 
 If you use the toolbox, please cite it:
 
-> Czajkowski, M. (2026). *DCE-design: experimental designs for discrete choice experiments in MATLAB* (version 0.2.0). https://github.com/czaj/DCE-design
+> Czajkowski, M. (2026). *DCE-design: experimental designs for discrete choice experiments in MATLAB* (version 0.2.1). https://github.com/czaj/DCE-design
 
-and report the version, the seed and the specification, which together reproduce the design. The methods it builds on are listed in [FEATURES.md](FEATURES.md); the blocking criterion is that of Bliemer, Hess, Collins & Amaris (2026) and the orthogonal arrays are found with the algorithm of Xu (2002).
+and record the version, seed, specification, command, starting cards (if supplied) and draw method. The methods it builds on are listed in [FEATURES.md](FEATURES.md); the blocking criterion is that of Bliemer, Hess, Collins & Amaris (2026) and the orthogonal arrays are found with the algorithm of Xu (2002).
 
 #
 The codes are published under a Creative Commons Attribution 4.0 License. This means that you are free to use, share, or modify these codes for any purpose, even commercially. What we ask in return is that you acknowledge the source of the codes or reference one of our papers (see czaj.org/research for details).
